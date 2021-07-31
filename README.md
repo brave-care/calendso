@@ -1,3 +1,4 @@
+bump
 <!-- PROJECT LOGO -->
 <p align="center">
   <a href="https://github.com/calendso/calendso">
