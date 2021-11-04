@@ -1,48 +1,68 @@
+import { TFunction } from "next-i18next";
+import nodemailer from "nodemailer";
 
-import {serverConfig} from "../serverConfig";
-import nodemailer from 'nodemailer';
+import { getErrorFromUnknown } from "@lib/errors";
 
-export default function createInvitationEmail(data: any, options: any = {}) {
-  return sendEmail(data, {
-    provider: {
-      transport: serverConfig.transport,
-      from: serverConfig.from,
-    },
-    ...options
-  });
+import { serverConfig } from "../serverConfig";
+
+export type Invitation = {
+  language: TFunction;
+  from?: string;
+  toEmail: string;
+  teamName: string;
+  token?: string;
+};
+
+type EmailProvider = {
+  from: string;
+  transport: any;
+};
+
+export function createInvitationEmail(data: Invitation) {
+  const provider = {
+    transport: serverConfig.transport,
+    from: serverConfig.from,
+  } as EmailProvider;
+  return sendEmail(data, provider);
 }
 
-const sendEmail = (invitation: any, {
-  provider,
-}) => new Promise( (resolve, reject) => {
-  const { transport, from } = provider;
+const sendEmail = (invitation: Invitation, provider: EmailProvider): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const { transport, from } = provider;
 
-  nodemailer.createTransport(transport).sendMail(
-    {
-      from: `Calendso <${from}>`,
-      to: invitation.toEmail,
-      subject: (
-        invitation.from ? invitation.from + ' invited you' : 'You have been invited'
-      ) + ` to join ${invitation.teamName}`,
-      html: html(invitation),
-      text: text(invitation),
-    },
-    (error) => {
-      if (error) {
-        console.error("SEND_INVITATION_NOTIFICATION_ERROR", invitation.toEmail, error);
-        return reject(new Error(error));
+    const { language: t } = invitation;
+    const invitationHtml = html(invitation);
+    nodemailer.createTransport(transport).sendMail(
+      {
+        from: `Cal.com <${from}>`,
+        to: invitation.toEmail,
+        subject: invitation.from
+          ? t("user_invited_you", { user: invitation.from, teamName: invitation.teamName })
+          : t("you_have_been_invited", { teamName: invitation.teamName }),
+        html: invitationHtml,
+        text: text(invitationHtml),
+      },
+      (_err) => {
+        if (_err) {
+          const err = getErrorFromUnknown(_err);
+          console.error("SEND_INVITATION_NOTIFICATION_ERROR", invitation.toEmail, err);
+          reject(err);
+          return;
+        }
+        return resolve();
       }
-      return resolve();
-    });
-});
+    );
+  });
 
-const html = (invitation: any) => {
+export function html(invitation: Invitation): string {
+  const { language: t } = invitation;
   let url: string = process.env.BASE_URL + "/settings/teams";
   if (invitation.token) {
     url = `${process.env.BASE_URL}/auth/signup?token=${invitation.token}&callbackUrl=${url}`;
   }
 
-  return `
+  return (
+    `
     <table style="width: 100%;">
     <tr>
       <td>
@@ -50,10 +70,12 @@ const html = (invitation: any) => {
         <table style="width: 640px; border: 1px solid gray; padding: 15px; margin: 0 auto; text-align: left;">
         <tr>
         <td>
-      Hi,<br />
+      ${t("hi")},<br />
       <br />` +
-    (invitation.from ? invitation.from + ' invited you' : 'You have been invited' )
-    + ` to join the team "${invitation.teamName}" in Calendso.<br />
+    (invitation.from
+      ? t("user_invited_you", { user: invitation.from, teamName: invitation.teamName })
+      : t("you_have_been_invited", { teamName: invitation.teamName })) +
+    `<br />
       <br />
       <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:separate;line-height:100%;">
         <tr>
@@ -65,13 +87,15 @@ const html = (invitation: any) => {
                    <center style="color:#ffffff;font-family:Helvetica, sans-serif;font-size:18px; font-weight: 600;">Join team</center>
                  </v:roundrect>
               <![endif]-->
-                <a href="${url}" style="display: inline-block; mso-hide:all; background-color: #19cca3; color: #FFFFFF; border:1px solid #19cca3; border-radius: 6px; line-height: 220%; width: 200px; font-family: Helvetica, sans-serif; font-size:18px; font-weight:600; text-align: center; text-decoration: none; -webkit-text-size-adjust:none;  " target="_blank">Join team</a>
+                <a href="${url}" style="display: inline-block; mso-hide:all; background-color: #19cca3; color: #FFFFFF; border:1px solid #19cca3; border-radius: 6px; line-height: 220%; width: 200px; font-family: Helvetica, sans-serif; font-size:18px; font-weight:600; text-align: center; text-decoration: none; -webkit-text-size-adjust:none;  " target="_blank">${t(
+      "join_team"
+    )}</a>
                 </a>
               </div>
           </td>
         </tr>
       </table><br />
-      If you prefer not to use "${invitation.toEmail}" as your Calendso email or already have a Calendso account, please request another invitation to that email.
+      ${t("request_another_invitation_email", { toEmail: invitation.toEmail })}
       </td>
       </tr>
       </table>
@@ -79,8 +103,11 @@ const html = (invitation: any) => {
       </td>
       </tr>
     </table>
-  `;
+  `
+  );
 }
 
 // just strip all HTML and convert <br /> to \n
-const text = (evt: any) => html(evt).replace('<br />', "\n").replace(/<[^>]+>/g, '');
+export function text(htmlStr: string): string {
+  return htmlStr.replace("<br />", "\n").replace(/<[^>]+>/g, "");
+}

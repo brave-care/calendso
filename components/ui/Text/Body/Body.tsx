@@ -1,12 +1,12 @@
-import React from "react";
 import classnames from "classnames";
+import React from "react";
+
 import { TextProps } from "../Text";
-import Styles from "../Text.module.css";
 
 const Body: React.FunctionComponent<TextProps> = (props: TextProps) => {
-  const classes = classnames(Styles["text--body"], props?.className, props?.color);
+  const classes = classnames("text-gray-900 dark:text-white", props?.className);
 
-  return <p className={classes}>{props.children}</p>;
+  return <p className={classes}>{props?.text || props.children}</p>;
 };
 
 export default Body;

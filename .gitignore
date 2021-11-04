@@ -7,9 +7,13 @@
 /node_modules
 /.pnp
 .pnp.js
+/.yarn
 
 # testing
 /coverage
+.nyc_output
+playwright/videos
+playwright/screenshots
 
 # next.js
 /.next/
@@ -38,3 +42,15 @@ yarn-error.log*
 
 # Webstorm
 .idea
+
+### VisualStudioCode template
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Local History for Visual Studio Code
+.history/
+

@@ -1,6 +1,7 @@
 import dayjs, { Dayjs } from "dayjs";
-import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -47,16 +48,8 @@ const organizerBoundaries = (
 ): Boundary[] => {
   const boundaries: Boundary[] = [];
 
-  const startDay: number = +inviteeDate
-    .utc()
-    .startOf("day")
-    .add(inviteeBounds.lowerBound, "minutes")
-    .format("d");
-  const endDay: number = +inviteeDate
-    .utc()
-    .startOf("day")
-    .add(inviteeBounds.upperBound, "minutes")
-    .format("d");
+  const startDay: number = +inviteeDate.startOf("d").add(inviteeBounds.lowerBound, "minutes").format("d");
+  const endDay: number = +inviteeDate.startOf("d").add(inviteeBounds.upperBound, "minutes").format("d");
 
   workingHours.forEach((item) => {
     const lowerBound: number = item.startTime - dayjs().tz(organizerTimeZone).utcOffset();
@@ -102,9 +95,9 @@ const getSlotsBetweenBoundary = (frequency: number, { lowerBound, upperBound }: 
   const slots: Dayjs[] = [];
   for (let minutes = 0; lowerBound + minutes <= upperBound - frequency; minutes += frequency) {
     slots.push(
-      <Dayjs>dayjs
+      dayjs
         .utc()
-        .startOf("day")
+        .startOf("d")
         .add(lowerBound + minutes, "minutes")
     );
   }

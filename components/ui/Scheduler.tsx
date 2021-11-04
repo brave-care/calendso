@@ -1,12 +1,15 @@
+import { TrashIcon } from "@heroicons/react/outline";
+import { Availability } from "@prisma/client";
+import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import React, { useEffect, useState } from "react";
 import TimezoneSelect from "react-timezone-select";
-import { TrashIcon } from "@heroicons/react/outline";
+
+import { useLocale } from "@lib/hooks/useLocale";
+
 import { WeekdaySelect } from "./WeekdaySelect";
 import SetTimesModal from "./modal/SetTimesModal";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
-import { Availability } from "@prisma/client";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -23,6 +26,7 @@ export const Scheduler = ({
   timeZone: selectedTimeZone,
   setTimeZone,
 }: Props) => {
+  const { t } = useLocale();
   const [editSchedule, setEditSchedule] = useState(-1);
   const [dateOverrides, setDateOverrides] = useState([]);
   const [openingHours, setOpeningHours] = useState([]);
@@ -80,7 +84,7 @@ export const Scheduler = ({
             .startOf("day")
             .add(item.startTime, "minutes")
             .format(item.startTime % 60 === 0 ? "ha" : "h:mma")}
-          &nbsp;until&nbsp;
+          &nbsp;{t("until")}&nbsp;
           {dayjs()
             .startOf("day")
             .add(item.endTime, "minutes")
@@ -100,16 +104,16 @@ export const Scheduler = ({
     <div>
       <div className="flex">
         <div className="w-full">
-          <div className="">
+          <div>
             <label htmlFor="timeZone" className="block text-sm font-medium text-gray-700">
-              Timezone
+              {t("timezone")}
             </label>
             <div className="mt-1">
               <TimezoneSelect
                 id="timeZone"
-                value={selectedTimeZone}
+                value={{ value: selectedTimeZone }}
                 onChange={(tz) => setTimeZone(tz.value)}
-                className="shadow-sm focus:ring-black focus:border-black mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
+                className="shadow-sm focus:ring-black focus:border-brand mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
               />
             </div>
           </div>
@@ -119,7 +123,7 @@ export const Scheduler = ({
             ))}
           </ul>
           <button type="button" onClick={addNewSchedule} className="btn-white btn-sm mt-2">
-            Add another
+            {t("add_another")}
           </button>
         </div>
       </div>

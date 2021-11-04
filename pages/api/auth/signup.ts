@@ -1,26 +1,31 @@
-import prisma from '../../../lib/prisma';
-import { hashPassword } from "../../../lib/auth";
+import { NextApiRequest, NextApiResponse } from "next";
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-      return;
-  }
+import { hashPassword } from "@lib/auth";
+import prisma from "@lib/prisma";
+import slugify from "@lib/slugify";
 
-  const data = req.body;
-  const { username, email, password } = data;
-
-  if (!username) {
-    res.status(422).json({message: 'Invalid username'});
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
     return;
   }
 
-  if (!email || !email.includes('@')) {
-    res.status(422).json({message: 'Invalid email'});
+  const data = req.body;
+  const { email, password } = data;
+  const username = slugify(data.username);
+  const userEmail = email.toLowerCase();
+
+  if (!username) {
+    res.status(422).json({ message: "Invalid username" });
+    return;
+  }
+
+  if (!userEmail || !userEmail.includes("@")) {
+    res.status(422).json({ message: "Invalid email" });
     return;
   }
 
   if (!password || password.trim().length < 7) {
-    res.status(422).json({message: 'Invalid input - password should be at least 7 characters long.'});
+    res.status(422).json({ message: "Invalid input - password should be at least 7 characters long." });
     return;
   }
 
@@ -28,34 +33,26 @@ export default async function handler(req, res) {
     where: {
       OR: [
         {
-          username: username
+          username: username,
         },
         {
-          email: email
-        }
+          email: userEmail,
+        },
       ],
-      AND: [
-        {
-          emailVerified: {
-            not: null,
-          },
-        }
-      ]
-    }
+    },
   });
 
   if (existingUser) {
-    let message: string = (
-      existingUser.email !== email
-    ) ? 'Username already taken' : 'Email address is already registered';
+    const message: string =
+      existingUser.email !== userEmail ? "Username already taken" : "Email address is already registered";
 
-    return res.status(409).json({message});
+    return res.status(409).json({ message });
   }
 
   const hashedPassword = await hashPassword(password);
 
-  const user = await prisma.user.upsert({
-    where: { email, },
+  await prisma.user.upsert({
+    where: { email: userEmail },
     update: {
       username,
       password: hashedPassword,
@@ -63,10 +60,10 @@ export default async function handler(req, res) {
     },
     create: {
       username,
-      email,
+      email: userEmail,
       password: hashedPassword,
-    }
+    },
   });
 
-  res.status(201).json({message: 'Created user'});
+  res.status(201).json({ message: "Created user" });
 }

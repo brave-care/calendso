@@ -1,263 +1,92 @@
-import { useEffect, useState } from "react";
-import { GetServerSideProps, GetServerSidePropsContext } from "next";
-import Head from "next/head";
-import { ChevronDownIcon, ChevronUpIcon, ClockIcon, GlobeIcon } from "@heroicons/react/solid";
-import { useRouter } from "next/router";
-import dayjs, { Dayjs } from "dayjs";
-import * as Collapsible from "@radix-ui/react-collapsible";
+import { Prisma } from "@prisma/client";
+import { GetServerSidePropsContext } from "next";
 
-import prisma, { whereAndSelect } from "@lib/prisma";
-import { collectPageParameters, telemetryEventTypes, useTelemetry } from "../../lib/telemetry";
-import AvailableTimes from "../../components/booking/AvailableTimes";
-import TimeOptions from "../../components/booking/TimeOptions";
-import Avatar from "../../components/Avatar";
-import { timeZone } from "../../lib/clock";
-import DatePicker from "../../components/booking/DatePicker";
-import PoweredByCalendso from "../../components/ui/PoweredByCalendso";
-import Theme from "@components/Theme";
+import { asStringOrNull } from "@lib/asStringOrNull";
+import prisma from "@lib/prisma";
+import { inferSSRProps } from "@lib/types/inferSSRProps";
 
-export default function Type(props): Type {
-  // Get router variables
-  const router = useRouter();
-  const { rescheduleUid } = router.query;
+import AvailabilityPage from "@components/booking/pages/AvailabilityPage";
 
-  const { isReady } = Theme(props.user.theme);
+import { ssrInit } from "@server/lib/ssr";
 
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(() => {
-    return props.date && dayjs(props.date).isValid() ? dayjs(props.date) : null;
-  });
-  const [isTimeOptionsOpen, setIsTimeOptionsOpen] = useState(false);
-  const [timeFormat, setTimeFormat] = useState("h:mma");
-  const telemetry = useTelemetry();
+export type AvailabilityPageProps = inferSSRProps<typeof getServerSideProps>;
 
-  useEffect(() => {
-    handleToggle24hClock(localStorage.getItem("timeOption.is24hClock") === "true");
-    telemetry.withJitsu((jitsu) => jitsu.track(telemetryEventTypes.pageView, collectPageParameters()));
-  }, [telemetry]);
-
-  const changeDate = (date: Dayjs) => {
-    telemetry.withJitsu((jitsu) => jitsu.track(telemetryEventTypes.dateSelected, collectPageParameters()));
-    setSelectedDate(date);
-  };
-
-  useEffect(() => {
-    if (!selectedDate) {
-      return;
-    }
-
-    const formattedDate = selectedDate.utc().format("YYYY-MM-DD");
-
-    router.replace(
-      {
-        query: Object.assign(
-          {},
-          {
-            ...router.query,
-          },
-          {
-            date: formattedDate,
-          }
-        ),
-      },
-      undefined,
-      {
-        shallow: true,
-      }
-    );
-  }, [selectedDate]);
-
-  const handleSelectTimeZone = (selectedTimeZone: string): void => {
-    if (selectedDate) {
-      setSelectedDate(selectedDate.tz(selectedTimeZone));
-    }
-    setIsTimeOptionsOpen(false);
-  };
-
-  const handleToggle24hClock = (is24hClock: boolean) => {
-    setTimeFormat(is24hClock ? "HH:mm" : "h:mma");
-  };
-
-  return (
-    <>
-      <Head>
-        <title>
-          {rescheduleUid && "Reschedule"} {props.eventType.title} | {props.user.name || props.user.username} |
-          Calendso
-        </title>
-        <meta name="title" content={"Meet " + (props.user.name || props.user.username) + " via Calendso"} />
-        <meta name="description" content={props.eventType.description} />
-
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://calendso/" />
-        <meta
-          property="og:title"
-          content={"Meet " + (props.user.name || props.user.username) + " via Calendso"}
-        />
-        <meta property="og:description" content={props.eventType.description} />
-        <meta
-          property="og:image"
-          content={
-            "https://og-image-one-pi.vercel.app/" +
-            encodeURIComponent(
-              "Meet **" + (props.user.name || props.user.username) + "** <br>" + props.eventType.description
-            ).replace(/'/g, "%27") +
-            ".png?md=1&images=https%3A%2F%2Fcalendso.com%2Fcalendso-logo-white.svg&images=" +
-            encodeURIComponent(props.user.avatar)
-          }
-        />
-
-        <meta property="twitter:card" content="summary_large_image" />
-        <meta property="twitter:url" content="https://calendso/" />
-        <meta
-          property="twitter:title"
-          content={"Meet " + (props.user.name || props.user.username) + " via Calendso"}
-        />
-        <meta property="twitter:description" content={props.eventType.description} />
-        <meta
-          property="twitter:image"
-          content={
-            "https://og-image-one-pi.vercel.app/" +
-            encodeURIComponent(
-              "Meet **" + (props.user.name || props.user.username) + "** <br>" + props.eventType.description
-            ).replace(/'/g, "%27") +
-            ".png?md=1&images=https%3A%2F%2Fcalendso.com%2Fcalendso-logo-white.svg&images=" +
-            encodeURIComponent(props.user.avatar)
-          }
-        />
-      </Head>
-
-      {isReady && (
-        <div>
-          <main
-            className={
-              "mx-auto my-0 md:my-24 transition-max-width ease-in-out duration-500 " +
-              (selectedDate ? "max-w-5xl" : "max-w-3xl")
-            }>
-            <div className="sm:dark:border-gray-600 dark:bg-gray-900 bg-white md:border border-gray-200 rounded-sm">
-              {/* mobile: details */}
-              <div className="p-4 sm:p-8 block md:hidden">
-                <div className="flex items-center">
-                  <Avatar user={props.user} className="inline-block h-9 w-9 rounded-full" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium dark:text-gray-300 text-black">{props.user.name}</p>
-                    <div className="flex gap-2 text-xs font-medium text-gray-600">
-                      {props.eventType.title}
-                      <div>
-                        <ClockIcon className="inline-block w-4 h-4 mr-1 -mt-1" />
-                        {props.eventType.length} minutes
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p className="dark:text-gray-200 text-gray-600 mt-3">{props.eventType.description}</p>
-              </div>
-
-              <div className="sm:flex px-4 sm:py-5 sm:p-4">
-                <div
-                  className={
-                    "hidden md:block pr-8 sm:border-r sm:dark:border-gray-800 " +
-                    (selectedDate ? "sm:w-1/3" : "sm:w-1/2")
-                  }>
-                  <Avatar user={props.user} className="w-16 h-16 rounded-full mb-4" />
-                  <h2 className="font-medium dark:text-gray-300 text-gray-500">{props.user.name}</h2>
-                  <h1 className="text-3xl font-semibold dark:text-white text-gray-800 mb-4">
-                    {props.eventType.title}
-                  </h1>
-                  <p className="text-gray-500 mb-1 px-2 py-1 -ml-2">
-                    <ClockIcon className="inline-block w-4 h-4 mr-1 -mt-1" />
-                    {props.eventType.length} minutes
-                  </p>
-
-                  <TimezoneDropdown />
-
-                  <p className="dark:text-gray-200 text-gray-600 mt-3 mb-8">{props.eventType.description}</p>
-                </div>
-                <DatePicker
-                  date={selectedDate}
-                  periodType={props.eventType?.periodType}
-                  periodStartDate={props.eventType?.periodStartDate}
-                  periodEndDate={props.eventType?.periodEndDate}
-                  periodDays={props.eventType?.periodDays}
-                  periodCountCalendarDays={props.eventType?.periodCountCalendarDays}
-                  weekStart={props.user.weekStart}
-                  onDatePicked={changeDate}
-                  workingHours={props.workingHours}
-                  organizerTimeZone={props.eventType.timeZone || props.user.timeZone}
-                  inviteeTimeZone={timeZone()}
-                  eventLength={props.eventType.length}
-                  minimumBookingNotice={props.eventType.minimumBookingNotice}
-                />
-
-                <div className="ml-1 mt-4 block sm:hidden">
-                  <TimezoneDropdown />
-                </div>
-
-                {selectedDate && (
-                  <AvailableTimes
-                    workingHours={props.workingHours}
-                    timeFormat={timeFormat}
-                    organizerTimeZone={props.eventType.timeZone || props.user.timeZone}
-                    minimumBookingNotice={props.eventType.minimumBookingNotice}
-                    eventTypeId={props.eventType.id}
-                    eventLength={props.eventType.length}
-                    date={selectedDate}
-                    user={props.user}
-                  />
-                )}
-              </div>
-            </div>
-            {!props.user.hideBranding && <PoweredByCalendso />}
-          </main>
-        </div>
-      )}
-    </>
-  );
-
-  function TimezoneDropdown() {
-    return (
-      <Collapsible.Root open={isTimeOptionsOpen} onOpenChange={setIsTimeOptionsOpen}>
-        <Collapsible.Trigger className="text-gray-500 mb-1 px-2 py-1 -ml-2 text-left min-w-32">
-          <GlobeIcon className="inline-block w-4 h-4 mr-1 -mt-1" />
-          {timeZone()}
-          {isTimeOptionsOpen ? (
-            <ChevronUpIcon className="inline-block w-4 h-4 ml-1 -mt-1" />
-          ) : (
-            <ChevronDownIcon className="inline-block w-4 h-4 ml-1 -mt-1" />
-          )}
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <TimeOptions onSelectTimeZone={handleSelectTimeZone} onToggle24hClock={handleToggle24hClock} />
-        </Collapsible.Content>
-      </Collapsible.Root>
-    );
-  }
+export default function Type(props: AvailabilityPageProps) {
+  return <AvailabilityPage {...props} />;
 }
 
-export const getServerSideProps: GetServerSideProps = async (context: GetServerSidePropsContext) => {
-  const dateQuery = context.query?.date ?? null;
-  const date = Array.isArray(dateQuery) && dateQuery.length > 0 ? dateQuery.pop() : dateQuery;
+export const getServerSideProps = async (context: GetServerSidePropsContext) => {
+  const ssr = await ssrInit(context);
+  // get query params and typecast them to string
+  // (would be even better to assert them instead of typecasting)
+  const userParam = asStringOrNull(context.query.user);
+  const typeParam = asStringOrNull(context.query.type);
+  const dateParam = asStringOrNull(context.query.date);
 
-  const user = await whereAndSelect(
-    prisma.user.findFirst,
-    {
-      username: context.query.user.toLowerCase(),
+  if (!userParam || !typeParam) {
+    throw new Error(`File is not named [type]/[user]`);
+  }
+
+  const eventTypeSelect = Prisma.validator<Prisma.EventTypeSelect>()({
+    id: true,
+    title: true,
+    availability: true,
+    description: true,
+    length: true,
+    price: true,
+    currency: true,
+    periodType: true,
+    periodStartDate: true,
+    periodEndDate: true,
+    periodDays: true,
+    periodCountCalendarDays: true,
+    schedulingType: true,
+    minimumBookingNotice: true,
+    users: {
+      select: {
+        avatar: true,
+        name: true,
+        username: true,
+        hideBranding: true,
+        plan: true,
+      },
     },
-    [
-      "id",
-      "username",
-      "name",
-      "email",
-      "bio",
-      "avatar",
-      "startTime",
-      "endTime",
-      "timeZone",
-      "weekStart",
-      "availability",
-      "hideBranding",
-      "theme",
-    ]
-  );
+  });
+
+  const user = await prisma.user.findUnique({
+    where: {
+      username: userParam.toLowerCase(),
+    },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      email: true,
+      bio: true,
+      avatar: true,
+      startTime: true,
+      endTime: true,
+      timeZone: true,
+      weekStart: true,
+      availability: true,
+      hideBranding: true,
+      theme: true,
+      plan: true,
+      eventTypes: {
+        where: {
+          AND: [
+            {
+              slug: typeParam,
+            },
+            {
+              teamId: null,
+            },
+          ],
+        },
+        select: eventTypeSelect,
+      },
+    },
+  });
 
   if (!user) {
     return {
@@ -265,42 +94,73 @@ export const getServerSideProps: GetServerSideProps = async (context: GetServerS
     };
   }
 
-  const eventType = await whereAndSelect(
-    prisma.eventType.findFirst,
-    {
-      userId: user.id,
-      slug: context.query.type,
-    },
-    [
-      "id",
-      "title",
-      "description",
-      "length",
-      "availability",
-      "timeZone",
-      "periodType",
-      "periodDays",
-      "periodStartDate",
-      "periodEndDate",
-      "periodCountCalendarDays",
-      "minimumBookingNotice",
-    ]
-  );
-
-  if (!eventType) {
-    return {
-      notFound: true,
-    };
+  if (user.eventTypes.length !== 1) {
+    const eventTypeBackwardsCompat = await prisma.eventType.findFirst({
+      where: {
+        AND: [
+          {
+            userId: user.id,
+          },
+          {
+            slug: typeParam,
+          },
+        ],
+      },
+      select: eventTypeSelect,
+    });
+    if (!eventTypeBackwardsCompat) {
+      return {
+        notFound: true,
+      };
+    }
+    eventTypeBackwardsCompat.users.push({
+      avatar: user.avatar,
+      name: user.name,
+      username: user.username,
+      hideBranding: user.hideBranding,
+      plan: user.plan,
+    });
+    user.eventTypes.push(eventTypeBackwardsCompat);
   }
 
-  const getWorkingHours = (providesAvailability) =>
-    providesAvailability.availability && providesAvailability.availability.length
-      ? providesAvailability.availability
-      : null;
+  const [eventType] = user.eventTypes;
 
-  const workingHours: [] =
-    getWorkingHours(eventType) ||
-    getWorkingHours(user) ||
+  // check this is the first event
+
+  // TEMPORARILY disabled because of a bug during event create - during which users were able
+  // to create event types >n1.
+  /*if (user.plan === "FREE") {
+    const firstEventType = await prisma.eventType.findFirst({
+      where: {
+        OR: [
+          {
+            userId: user.id,
+          },
+          {
+            users: {
+              some: {
+                id: user.id,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+    if (firstEventType?.id !== eventType.id) {
+      return {
+        notFound: true,
+      } as const;
+    }
+  }*/
+  const getWorkingHours = (availability: typeof user.availability | typeof eventType.availability) =>
+    availability && availability.length ? availability : null;
+
+  const workingHours =
+    getWorkingHours(eventType.availability) ||
+    getWorkingHours(user.availability) ||
     [
       {
         days: [0, 1, 2, 3, 4, 5, 6],
@@ -318,10 +178,17 @@ export const getServerSideProps: GetServerSideProps = async (context: GetServerS
 
   return {
     props: {
-      user,
-      date,
+      profile: {
+        name: user.name,
+        image: user.avatar,
+        slug: user.username,
+        theme: user.theme,
+        weekStart: user.weekStart,
+      },
+      date: dateParam,
       eventType: eventTypeObject,
       workingHours,
+      trpcState: ssr.dehydrate(),
     },
   };
 };

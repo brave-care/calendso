@@ -1,39 +1,50 @@
-import prisma from '../../lib/prisma';
-import { getSession } from 'next-auth/client';
+import type { NextApiRequest, NextApiResponse } from "next";
 
-export default async function handler(req, res) {
-    if (req.method === 'GET') {
-        // Check that user is authenticated
-        const session = await getSession({req: req});
+import { getSession } from "@lib/auth";
+import prisma from "@lib/prisma";
 
-        if (!session) { res.status(401).json({message: 'You must be logged in to do this'}); return; }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!["GET", "DELETE"].includes(req.method!)) {
+    return res.status(405).end();
+  }
 
-        const credentials = await prisma.credential.findMany({
-            where: {
-                userId: session.user.id,
-            },
-            select: {
-                type: true,
-                key: true
-            }
-        });
+  // Check that user is authenticated
+  const session = await getSession({ req });
 
-        res.status(200).json(credentials);
-    }
+  if (!session) {
+    res.status(401).json({ message: "You must be logged in to do this" });
+    return;
+  }
 
-    if (req.method == "DELETE") {
-        const session = await getSession({req: req});
+  if (req.method === "GET") {
+    const credentials = await prisma.credential.findMany({
+      where: {
+        userId: session.user?.id,
+      },
+      select: {
+        type: true,
+      },
+    });
 
-        if (!session) { res.status(401).json({message: 'You must be logged in to do this'}); return; }
+    res.status(200).json(credentials);
+  }
 
-        const id = req.body.id;
+  if (req.method == "DELETE") {
+    const id = req.body.id;
 
-        const deleteIntegration = await prisma.credential.delete({
-            where: {
-                id: id,
-            },
-        });
+    await prisma.user.update({
+      where: {
+        id: session?.user?.id,
+      },
+      data: {
+        credentials: {
+          delete: {
+            id,
+          },
+        },
+      },
+    });
 
-        res.status(200).json({message: 'Integration deleted successfully'});
-    }
+    res.status(200).json({ message: "Integration deleted successfully" });
+  }
 }

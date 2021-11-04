@@ -1,12 +1,15 @@
-import React from "react";
 import classnames from "classnames";
+import React from "react";
+
 import { TextProps } from "../Text";
-import Styles from "../Text.module.css";
 
 const Overline: React.FunctionComponent<TextProps> = (props: TextProps) => {
-  const classes = classnames(Styles["text--overline"], props?.className, props?.color);
+  const classes = classnames(
+    "text-sm capitalize font-medium text-gray-900 dark:text-white",
+    props?.className
+  );
 
-  return <p className={classes}>{props.children}</p>;
+  return <p className={classes}>{props?.text || props.children}</p>;
 };
 
 export default Overline;

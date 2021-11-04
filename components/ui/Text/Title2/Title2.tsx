@@ -1,12 +1,12 @@
-import React from "react";
 import classnames from "classnames";
+import React from "react";
+
 import { TextProps } from "../Text";
-import Styles from "../Text.module.css";
 
 const Title2: React.FunctionComponent<TextProps> = (props: TextProps) => {
-  const classes = classnames(Styles["text--title2"], props?.className, props?.color);
+  const classes = classnames("text-base font-normal text-gray-900 dark:text-white", props?.className);
 
-  return <p className={classes}>{props.children}</p>;
+  return <p className={classes}>{props?.text || props.children}</p>;
 };
 
 export default Title2;

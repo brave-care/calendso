@@ -1,7 +1,9 @@
-import { serverConfig } from "../serverConfig";
 import nodemailer, { SentMessageInfo } from "nodemailer";
+import { SendMailOptions } from "nodemailer";
 
-const sendEmail = ({ to, subject, text, html = null }): Promise<string | SentMessageInfo> =>
+import { serverConfig } from "../serverConfig";
+
+const sendEmail = ({ to, subject, text, html }: SendMailOptions): Promise<string | SentMessageInfo> =>
   new Promise((resolve, reject) => {
     const { transport, from } = serverConfig;
 
@@ -11,7 +13,7 @@ const sendEmail = ({ to, subject, text, html = null }): Promise<string | SentMes
 
     nodemailer.createTransport(transport).sendMail(
       {
-        from: `Calendso ${from}`,
+        from: `Cal.com ${from}`,
         to,
         subject,
         text,

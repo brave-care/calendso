@@ -1,29 +1,38 @@
-import Head from "next/head";
-import Link from "next/link";
-import prisma, { whereAndSelect } from "../lib/prisma";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
 import { CheckIcon } from "@heroicons/react/outline";
 import { ClockIcon } from "@heroicons/react/solid";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import toArray from "dayjs/plugin/toArray";
 import timezone from "dayjs/plugin/timezone";
+import toArray from "dayjs/plugin/toArray";
+import utc from "dayjs/plugin/utc";
 import { createEvent } from "ics";
-import { getEventName } from "../lib/event";
-import Theme from "@components/Theme";
+import { GetServerSidePropsContext } from "next";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+
+import { asStringOrThrow, asStringOrNull } from "@lib/asStringOrNull";
+import { getEventName } from "@lib/event";
+import { useLocale } from "@lib/hooks/useLocale";
+import useTheme from "@lib/hooks/useTheme";
+import { isBrandingHidden } from "@lib/isBrandingHidden";
+import prisma from "@lib/prisma";
+import { inferSSRProps } from "@lib/types/inferSSRProps";
+
+import { HeadSeo } from "@components/seo/head-seo";
+import Button from "@components/ui/Button";
 
 dayjs.extend(utc);
 dayjs.extend(toArray);
 dayjs.extend(timezone);
 
-export default function Success(props) {
+export default function Success(props: inferSSRProps<typeof getServerSideProps>) {
+  const { t } = useLocale();
   const router = useRouter();
-  const { location, name } = router.query;
+  const { location, name, reschedule } = router.query;
 
   const [is24h, setIs24h] = useState(false);
-  const [date, setDate] = useState(dayjs.utc(router.query.date));
-  const { isReady } = Theme(props.user.theme);
+  const [date, setDate] = useState(dayjs.utc(asStringOrThrow(router.query.date)));
+  const { isReady } = useTheme(props.profile.theme);
 
   useEffect(() => {
     setDate(date.tz(localStorage.getItem("timeOption.preferredTimeZone") || dayjs.tz.guess()));
@@ -33,20 +42,23 @@ export default function Success(props) {
   const eventName = getEventName(name, props.eventType.title, props.eventType.eventName);
 
   function eventLink(): string {
-    const optional = {};
+    const optional: { location?: string } = {};
     if (location) {
-      optional["location"] = location;
+      optional["location"] = Array.isArray(location) ? location[0] : location;
     }
 
     const event = createEvent({
-      start: date
-        .utc()
-        .toArray()
-        .slice(0, 6)
-        .map((v, i) => (i === 1 ? v + 1 : v)),
+      start: [
+        date.toDate().getUTCFullYear(),
+        date.toDate().getUTCMonth(),
+        date.toDate().getUTCDate(),
+        date.toDate().getUTCHours(),
+        date.toDate().getUTCMinutes(),
+      ],
       startInputType: "utc",
       title: eventName,
-      description: props.eventType.description,
+      description: props.eventType.description ? props.eventType.description : undefined,
+      /** formatted to required type of description ^ */
       duration: { minutes: props.eventType.length },
       ...optional,
     });
@@ -55,60 +67,55 @@ export default function Success(props) {
       throw event.error;
     }
 
-    return encodeURIComponent(event.value);
+    return encodeURIComponent(event.value ? event.value : false);
   }
 
+  const needsConfirmation = props.eventType.requiresConfirmation && reschedule != "true";
+
   return (
-    isReady && (
-      <div className="bg-neutral-50 dark:bg-neutral-900 h-screen">
-        <Head>
-          <title>
-            Booking {props.eventType.requiresConfirmation ? "Submitted" : "Confirmed"} | {eventName} |
-            Calendso
-          </title>
-          <link rel="icon" href="/favicon.ico" />
-        </Head>
-        <main className="max-w-3xl mx-auto py-24">
-          <div className="fixed z-50 inset-0 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              <div className="fixed inset-0 my-4 sm:my-0 transition-opacity" aria-hidden="true">
+    (isReady && (
+      <div className="h-screen bg-neutral-50 dark:bg-neutral-900" data-testid="success-page">
+        <HeadSeo
+          title={needsConfirmation ? t("booking_submitted") : t("booking_confirmed")}
+          description={needsConfirmation ? t("booking_submitted") : t("booking_confirmed")}
+        />
+        <main className="max-w-3xl py-24 mx-auto">
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-end justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div className="fixed inset-0 my-4 transition-opacity sm:my-0" aria-hidden="true">
                 <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">
                   &#8203;
                 </span>
                 <div
-                  className="inline-block align-bottom dark:bg-gray-800 bg-white rounded-sm px-8 pt-5 pb-4 text-left overflow-hidden border border-neutral-200 dark:border-neutral-700 transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:py-6"
+                  className="inline-block px-8 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white border rounded-sm dark:bg-gray-800 border-neutral-200 dark:border-neutral-700 sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:py-6"
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="modal-headline">
                   <div>
-                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-                      {!props.eventType.requiresConfirmation && (
-                        <CheckIcon className="h-8 w-8 text-green-600" />
-                      )}
-                      {props.eventType.requiresConfirmation && (
-                        <ClockIcon className="h-8 w-8 text-green-600" />
-                      )}
+                    <div className="flex items-center justify-center w-12 h-12 mx-auto bg-green-100 rounded-full">
+                      {!needsConfirmation && <CheckIcon className="w-8 h-8 text-green-600" />}
+                      {needsConfirmation && <ClockIcon className="w-8 h-8 text-green-600" />}
                     </div>
                     <div className="mt-3 text-center sm:mt-5">
                       <h3
-                        className="text-2xl leading-6 font-semibold dark:text-white text-neutral-900"
+                        className="text-2xl font-semibold leading-6 dark:text-white text-neutral-900"
                         id="modal-headline">
-                        {props.eventType.requiresConfirmation ? "Submitted" : "This meeting is scheduled"}
+                        {needsConfirmation ? t("submitted") : t("meeting_is_scheduled")}
                       </h3>
                       <div className="mt-3">
                         <p className="text-sm text-neutral-600 dark:text-gray-300">
-                          {props.eventType.requiresConfirmation
-                            ? `${
-                                props.user.name || props.user.username
-                              } still needs to confirm or reject the booking.`
-                            : `We emailed you and the other attendees a calendar invitation with all the details.`}
+                          {needsConfirmation
+                            ? props.profile.name !== null
+                              ? t("user_needs_to_confirm_or_reject_booking", { user: props.profile.name })
+                              : t("needs_to_be_confirmed_or_rejected")
+                            : t("emailed_you_and_attendees")}
                         </p>
                       </div>
-                      <div className="mt-4 text-gray-700 dark:text-gray-300 border-t border-b dark:border-gray-900 py-4 grid grid-cols-3 text-left">
-                        <div className="font-medium">What</div>
-                        <div className="mb-6 col-span-2">{eventName}</div>
-                        <div className="font-medium">When</div>
-                        <div className="mb-6 col-span-2">
+                      <div className="grid grid-cols-3 py-4 mt-4 text-left text-gray-700 border-t border-b dark:text-gray-300 dark:border-gray-900">
+                        <div className="font-medium">{t("what")}</div>
+                        <div className="col-span-2 mb-6">{eventName}</div>
+                        <div className="font-medium">{t("when")}</div>
+                        <div className="col-span-2">
                           {date.format("dddd, DD MMMM YYYY")}
                           <br />
                           {date.format(is24h ? "H:mm" : "h:mma")} - {props.eventType.length} mins{" "}
@@ -118,19 +125,19 @@ export default function Success(props) {
                         </div>
                         {location && (
                           <>
-                            <div className="font-medium">Where</div>
+                            <div className="font-medium">{t("where")}</div>
                             <div className="col-span-2">{location}</div>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
-                  {!props.eventType.requiresConfirmation && (
-                    <div className="mt-5 sm:mt-0 sm:pt-4 pt-2 text-center flex">
-                      <span className="font-medium text-gray-700 dark:text-gray-50 flex self-center mr-6">
-                        Add to calendar
+                  {!needsConfirmation && (
+                    <div className="flex pt-2 pb-4 mt-5 text-center border-b sm:mt-0 sm:pt-4">
+                      <span className="flex self-center mr-2 font-medium text-gray-700 dark:text-gray-50">
+                        {t("add_to_calendar")}
                       </span>
-                      <div className="flex">
+                      <div className="flex justify-center flex-grow text-center">
                         <Link
                           href={
                             `https://calendar.google.com/calendar/r/eventedit?dates=${date
@@ -140,9 +147,9 @@ export default function Success(props) {
                               .utc()
                               .format("YYYYMMDDTHHmmss[Z]")}&text=${eventName}&details=${
                               props.eventType.description
-                            }` + (location ? "&location=" + encodeURIComponent(location) : "")
+                            }` + (typeof location === "string" ? encodeURIComponent(location) : "")
                           }>
-                          <a className="mx-2 rounded-sm border border-neutral-200 dark:border-neutral-700 py-2 px-3">
+                          <a className="w-10 h-10 px-3 py-2 mx-2 border rounded-sm border-neutral-200 dark:border-neutral-700 dark:text-white">
                             <svg
                               className="inline-block w-4 h-4 -mt-1"
                               fill="currentColor"
@@ -167,7 +174,7 @@ export default function Success(props) {
                             ) + (location ? "&location=" + location : "")
                           }>
                           <a
-                            className="mx-2 rounded-sm border border-neutral-200 dark:border-neutral-700 py-2 px-3"
+                            className="w-10 h-10 px-3 py-2 mx-2 border rounded-sm border-neutral-200 dark:border-neutral-700 dark:text-white"
                             target="_blank">
                             <svg
                               className="inline-block w-4 h-4 mr-1 -mt-1"
@@ -193,7 +200,7 @@ export default function Success(props) {
                             ) + (location ? "&location=" + location : "")
                           }>
                           <a
-                            className="mx-2 rounded-sm border border-neutral-200 dark:border-neutral-700 py-2 px-3"
+                            className="w-10 h-10 px-3 py-2 mx-2 border rounded-sm border-neutral-200 dark:border-neutral-700 dark:text-white"
                             target="_blank">
                             <svg
                               className="inline-block w-4 h-4 mr-1 -mt-1"
@@ -207,14 +214,15 @@ export default function Success(props) {
                         </Link>
                         <Link href={"data:text/calendar," + eventLink()}>
                           <a
-                            className="mx-2 rounded-sm border border-neutral-200 dark:border-neutral-700 py-2 px-3"
+                            className="w-10 h-10 px-3 py-2 mx-2 border rounded-sm border-neutral-200 dark:border-neutral-700 dark:text-white"
                             download={props.eventType.title + ".ics"}>
                             <svg
                               version="1.1"
+                              fill="currentColor"
                               xmlns="http://www.w3.org/2000/svg"
                               viewBox="0 0 1000 1000"
                               className="inline-block w-4 h-4 mr-1 -mt-1">
-                              <title>Other</title>
+                              <title>{t("other")}</title>
                               <path d="M971.3,154.9c0-34.7-28.2-62.9-62.9-62.9H611.7c-1.3,0-2.6,0.1-3.9,0.2V10L28.7,87.3v823.4L607.8,990v-84.6c1.3,0.1,2.6,0.2,3.9,0.2h296.7c34.7,0,62.9-28.2,62.9-62.9V154.9z M607.8,636.1h44.6v-50.6h-44.6v-21.9h44.6v-50.6h-44.6v-92h277.9v230.2c0,3.8-3.1,7-7,7H607.8V636.1z M117.9,644.7l-50.6-2.4V397.5l50.6-2.2V644.7z M288.6,607.3c17.6,0.6,37.3-2.8,49.1-7.2l9.1,48c-11,5.1-35.6,9.9-66.9,8.3c-85.4-4.3-127.5-60.7-127.5-132.6c0-86.2,57.8-136.7,133.2-140.1c30.3-1.3,53.7,4,64.3,9.2l-12.2,48.9c-12.1-4.9-28.8-9.2-49.5-8.6c-45.3,1.2-79.5,30.1-79.5,87.4C208.8,572.2,237.8,605.7,288.6,607.3z M455.5,665.2c-32.4-1.6-63.7-11.3-79.1-20.5l12.6-50.7c16.8,9.1,42.9,18.5,70.4,19.4c30.1,1,46.3-10.7,46.3-29.3c0-17.8-14-28.1-48.8-40.6c-46.9-16.4-76.8-41.7-76.8-81.5c0-46.6,39.3-84.1,106.8-87.1c33.3-1.5,58.3,4.2,76.5,11.2l-15.4,53.3c-12.1-5.3-33.5-12.8-62.3-12c-28.3,0.8-41.9,13.6-41.9,28.1c0,17.8,16.1,25.5,53.6,39c52.9,18.5,78.4,45.3,78.4,86.4C575.6,629.7,536.2,669.2,455.5,665.2z M935.3,842.7c0,14.9-12.1,27-27,27H611.7c-1.3,0-2.6-0.2-3.9-0.4V686.2h270.9c19.2,0,34.9-15.6,34.9-34.9V398.4c0-19.2-15.6-34.9-34.9-34.9h-47.1v-32.3H808v32.3h-44.8v-32.3h-22.7v32.3h-43.3v-32.3h-22.7v32.3H628v-32.3h-20.2v-203c1.31.2,2.6-0.4,3.9-0.4h296.7c14.9,0,27,12.1,27,27L935.3,842.7L935.3,842.7z" />
                             </svg>
                           </a>
@@ -222,9 +230,29 @@ export default function Success(props) {
                       </div>
                     </div>
                   )}
-                  {!props.user.hideBranding && (
-                    <div className="mt-4 pt-4 border-t dark:border-gray-900  text-gray-400 text-center text-xs dark:text-white">
-                      <a href="https://checkout.calendso.com">Create your own booking link with Calendso</a>
+                  {!props.hideBranding && (
+                    <div className="pt-4 text-xs text-center text-gray-400 dark:border-gray-900 dark:text-white">
+                      <a href="https://cal.com/signup">{t("create_booking_link_with_calcom")}</a>
+
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          router.push(`https://cal.com/signup?email=` + (e as any).target.email.value);
+                        }}
+                        className="flex mt-4">
+                        <input
+                          type="email"
+                          name="email"
+                          id="email"
+                          inputMode="email"
+                          defaultValue={router.query.email}
+                          className="block w-full text-gray-600 border-gray-300 shadow-sm dark:bg-brand dark:text-white dark:border-gray-900 focus:ring-black focus:border-brand sm:text-sm"
+                          placeholder="rick.astley@cal.com"
+                        />
+                        <Button type="submit" className="min-w-max" color="primary">
+                          {t("try_for_free")}
+                        </Button>
+                      </form>
                     </div>
                   )}
                 </div>
@@ -233,38 +261,87 @@ export default function Success(props) {
           </div>
         </main>
       </div>
-    )
+    )) ||
+    null
   );
 }
 
-export async function getServerSideProps(context) {
-  const user = context.query.user
-    ? await whereAndSelect(
-        prisma.user.findFirst,
-        {
-          username: context.query.user,
-        },
-        ["username", "name", "bio", "avatar", "hideBranding", "theme"]
-      )
-    : null;
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const typeId = parseInt(asStringOrNull(context.query.type) ?? "");
 
-  if (!user) {
+  if (isNaN(typeId)) {
     return {
       notFound: true,
     };
   }
 
-  const eventType = await whereAndSelect(
-    prisma.eventType.findUnique,
-    {
-      id: parseInt(context.query.type),
+  const eventType = await prisma.eventType.findUnique({
+    where: {
+      id: typeId,
     },
-    ["id", "title", "description", "length", "eventName", "requiresConfirmation"]
-  );
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      length: true,
+      eventName: true,
+      requiresConfirmation: true,
+      userId: true,
+      users: {
+        select: {
+          name: true,
+          hideBranding: true,
+          plan: true,
+          theme: true,
+        },
+      },
+      team: {
+        select: {
+          name: true,
+          hideBranding: true,
+        },
+      },
+    },
+  });
+
+  if (!eventType) {
+    return {
+      notFound: true,
+    };
+  }
+  if (!eventType.users.length && eventType.userId) {
+    // TODO we should add `user User` relation on `EventType` so this extra query isn't needed
+    const user = await prisma.user.findUnique({
+      where: {
+        id: eventType.userId,
+      },
+      select: {
+        name: true,
+        hideBranding: true,
+        plan: true,
+        theme: true,
+      },
+    });
+    if (user) {
+      eventType.users.push(user);
+    }
+  }
+
+  if (!eventType.users.length) {
+    return {
+      notFound: true,
+    };
+  }
+
+  const profile = {
+    name: eventType.team?.name || eventType.users[0]?.name || null,
+    theme: (!eventType.team?.name && eventType.users[0]?.theme) || null,
+  };
 
   return {
     props: {
-      user,
+      hideBranding: eventType.team ? eventType.team.hideBranding : isBrandingHidden(eventType.users[0]),
+      profile,
       eventType,
     },
   };
